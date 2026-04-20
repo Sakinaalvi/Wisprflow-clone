@@ -308,11 +308,21 @@ class VoxFlowApp:
         for n in names:
             items.append(pystray.MenuItem(
                 n,
-                lambda _icon, _item, name=n: self._set_active_profile(name),
-                checked=lambda i, name=n: self.config.active_profile == name,
+                self._make_profile_action(n),
+                checked=self._make_profile_checker(n),
                 radio=True,
             ))
         return pystray.Menu(*items)
+
+    def _make_profile_action(self, name: str):
+        def _action(_icon, _item):
+            self._set_active_profile(name)
+        return _action
+
+    def _make_profile_checker(self, name: str):
+        def _checked(_item):
+            return self.config.active_profile == name
+        return _checked
 
     def _set_active_profile(self, name: str) -> None:
         self.config.active_profile = name
