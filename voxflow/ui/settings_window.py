@@ -109,29 +109,55 @@ class SettingsWindow:
     def _build_ai_tab(self, parent) -> ttk.Frame:
         f = ttk.Frame(parent, padding=16)
         self.var_ai = tk.BooleanVar(value=self.config.ai_enabled)
+        self.var_provider = tk.StringVar(value=self.config.ai_provider)
+        self.var_ollama_model = tk.StringVar(value=self.config.ollama_model)
+        self.var_ollama_url = tk.StringVar(value=self.config.ollama_url)
         self.var_vc = tk.BooleanVar(value=self.config.voice_commands_enabled)
         self.var_fillers = tk.BooleanVar(value=self.config.strip_filler_words)
 
         ttk.Checkbutton(
-            f, text="Enable AI post-processing (needs OPENAI_API_KEY in .env)",
-            variable=self.var_ai,
+            f, text="Enable AI post-processing", variable=self.var_ai,
         ).grid(row=0, column=0, columnspan=2, sticky="w", pady=4)
+
+        ttk.Label(f, text="Provider").grid(row=1, column=0, sticky="w", pady=4)
+        ttk.Combobox(
+            f, textvariable=self.var_provider, values=["ollama", "openai"],
+            state="readonly", width=20,
+        ).grid(row=1, column=1, sticky="w")
+        ttk.Label(
+            f,
+            text="ollama = 100% local (needs `ollama serve` running). openai = cloud, needs OPENAI_API_KEY in .env.",
+            foreground="#666", wraplength=480, justify="left",
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(0, 8))
+
+        ttk.Label(f, text="Ollama model").grid(row=3, column=0, sticky="w", pady=4)
+        ttk.Entry(f, textvariable=self.var_ollama_model, width=24).grid(
+            row=3, column=1, sticky="w"
+        )
+        ttk.Label(
+            f, text="e.g. llama3.2, llama3.1, qwen2.5, mistral", foreground="#666",
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(0, 8))
+
+        ttk.Label(f, text="Ollama URL").grid(row=5, column=0, sticky="w", pady=4)
+        ttk.Entry(f, textvariable=self.var_ollama_url, width=30).grid(
+            row=5, column=1, sticky="w"
+        )
 
         ttk.Checkbutton(
             f, text='Enable voice commands ("new line", "period", ...)',
             variable=self.var_vc,
-        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=4)
+        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(12, 4))
 
         ttk.Checkbutton(
             f, text="Strip common filler words locally (um, uh, like, you know)",
             variable=self.var_fillers,
-        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=4)
+        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=4)
 
         ttk.Label(f, text="Custom replacements (JSON)").grid(
-            row=3, column=0, columnspan=2, sticky="w", pady=(16, 4)
+            row=8, column=0, columnspan=2, sticky="w", pady=(16, 4)
         )
-        self.txt_replacements = tk.Text(f, height=10, width=56)
-        self.txt_replacements.grid(row=4, column=0, columnspan=2, sticky="we")
+        self.txt_replacements = tk.Text(f, height=8, width=56)
+        self.txt_replacements.grid(row=9, column=0, columnspan=2, sticky="we")
         self.txt_replacements.insert(
             "1.0", json.dumps(self.config.custom_replacements, indent=2) or "{}"
         )
@@ -140,7 +166,7 @@ class SettingsWindow:
             f,
             text='Example: {"my email": "me@example.com", "gpg": "GPG"}',
             foreground="#666",
-        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        ).grid(row=10, column=0, columnspan=2, sticky="w", pady=(4, 0))
         return f
 
     # ----- helpers -----
@@ -175,6 +201,9 @@ class SettingsWindow:
         self.config.type_delay_ms = int(self.var_delay.get())
         self.config.play_sounds = bool(self.var_sounds.get())
         self.config.ai_enabled = bool(self.var_ai.get())
+        self.config.ai_provider = self.var_provider.get()
+        self.config.ollama_model = self.var_ollama_model.get().strip() or "llama3.2"
+        self.config.ollama_url = self.var_ollama_url.get().strip() or "http://localhost:11434"
         self.config.voice_commands_enabled = bool(self.var_vc.get())
         self.config.strip_filler_words = bool(self.var_fillers.get())
         self.config.custom_replacements = replacements

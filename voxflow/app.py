@@ -59,6 +59,9 @@ class VoxFlowApp:
             custom_replacements=self.config.custom_replacements,
             strip_filler_words=self.config.strip_filler_words,
             ai_enabled=self.config.ai_enabled,
+            ai_provider=self.config.ai_provider,
+            ollama_model=self.config.ollama_model,
+            ollama_url=self.config.ollama_url,
         )
         self.text_output = TextOutput(type_delay_ms=self.config.type_delay_ms)
         self.history = History(HISTORY_PATH)
@@ -216,6 +219,9 @@ class VoxFlowApp:
             custom_replacements=self.config.custom_replacements,
             strip_filler_words=self.config.strip_filler_words,
             ai_enabled=self.config.ai_enabled,
+            ai_provider=self.config.ai_provider,
+            ollama_model=self.config.ollama_model,
+            ollama_url=self.config.ollama_url,
         )
         self.text_output.type_delay_ms = self.config.type_delay_ms
         self.recorder = Recorder(

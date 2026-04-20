@@ -83,16 +83,21 @@ class Transcriber:
     def transcribe(self, audio: np.ndarray, sample_rate: int) -> str:
         if audio.size == 0:
             return ""
-        self.ensure_loaded()
-        assert self._model is not None
-
         if sample_rate != 16000:
             # faster-whisper expects 16 kHz mono float32
             raise ValueError(f"Expected 16kHz audio, got {sample_rate}Hz")
+        return self._run(audio)
 
+    def transcribe_file(self, path: str) -> str:
+        """Transcribe an audio file from disk. faster-whisper handles decoding/resampling."""
+        return self._run(path)
+
+    def _run(self, source) -> str:
+        self.ensure_loaded()
+        assert self._model is not None
         lang = None if self.language == "auto" else self.language
         segments, info = self._model.transcribe(
-            audio,
+            source,
             language=lang,
             vad_filter=True,
             beam_size=5,

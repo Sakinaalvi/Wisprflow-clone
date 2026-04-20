@@ -38,6 +38,9 @@ class Config:
 
     # Post-processing
     ai_enabled: bool = False
+    ai_provider: str = "ollama"      # openai | ollama
+    ollama_model: str = "llama3.2"
+    ollama_url: str = "http://localhost:11434"
     voice_commands_enabled: bool = True
     custom_replacements: dict[str, str] = field(default_factory=dict)
     strip_filler_words: bool = False  # simple local cleanup

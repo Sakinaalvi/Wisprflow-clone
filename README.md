@@ -107,6 +107,25 @@ Settings are stored in `~/.voxflow/config.json` and editable from the GUI:
 
 ### AI post-processing (optional)
 
+VoxFlow supports two AI providers for cleanup:
+
+#### Option A — Ollama (100% local, recommended)
+
+Runs entirely on your PC. No API key, no data leaves your machine.
+
+```bash
+# Install Ollama from https://ollama.com (one-time)
+ollama pull llama3.2     # or llama3.1, qwen2.5, mistral, ...
+ollama serve             # starts the local server on :11434
+```
+
+Then in VoxFlow settings → **AI & Vocabulary** tab:
+- Enable "AI post-processing"
+- Provider: **ollama**
+- Ollama model: **llama3.2** (or whatever you pulled)
+
+#### Option B — OpenAI (cloud)
+
 Create `.env` in the project root:
 
 ```env
@@ -114,7 +133,31 @@ OPENAI_API_KEY=sk-...
 AI_MODEL=gpt-4o-mini
 ```
 
-Then enable "AI Post-Processing" in settings. VoxFlow will pass your raw transcript through the model with a prompt to fix punctuation, remove filler words, and format lists/paragraphs.
+In settings, set Provider: **openai**.
+
+Either way, VoxFlow passes your raw transcript through the model with a prompt to fix punctuation, remove filler words, and format lists/paragraphs.
+
+---
+
+## CLI mode (quick smoke test without mic/hotkey)
+
+Want to verify transcription quality before wiring up mic & hotkeys? Transcribe an audio file directly:
+
+```bash
+# basic
+python -m voxflow transcribe path/to/audio.wav
+
+# with post-processing (voice commands + custom vocabulary)
+python -m voxflow transcribe audio.mp3 --post
+
+# with AI cleanup (uses the configured provider, e.g. ollama)
+python -m voxflow transcribe audio.mp3 --post --ai
+
+# override model for a one-off run
+python -m voxflow transcribe audio.wav --model large-v3 --language en --device cuda
+```
+
+Accepts any format `ffmpeg` supports (`.wav`, `.mp3`, `.flac`, `.m4a`, `.ogg`, ...).
 
 ---
 
@@ -176,8 +219,9 @@ voxflow/
 - [ ] Real-time streaming transcription (live partial results)
 - [ ] Per-app profiles (e.g. different vocab for Slack vs. VS Code)
 - [ ] Plugin system for custom post-processors
-- [ ] Local LLM post-processing (Ollama / llama.cpp)
+- [x] Local LLM post-processing (Ollama) ✅
 - [ ] Auto-start on login installer
+- [ ] Packaged binaries (PyInstaller) for Win/Mac/Linux
 
 PRs welcome.
 
