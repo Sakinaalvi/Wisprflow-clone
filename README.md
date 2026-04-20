@@ -8,12 +8,17 @@ VoxFlow runs [OpenAI Whisper](https://github.com/openai/whisper) entirely on you
 
 ## Features
 
-- **100% local transcription** — runs fully offline on CPU or GPU (CUDA).
+## Features
+
+- **Two transcription backends** — switch any time from Settings or tray:
+  - **Local** (`faster-whisper`) — runs Whisper on your CPU/GPU. Free, offline, no rate limits.
+  - **OpenAI API** — uses OpenAI's Whisper / `gpt-4o-transcribe` models. Fastest, most accurate, uses your API key.
 - **Hold-to-talk global hotkey** — configurable (default: `Right Ctrl`).
 - **Live overlay** — always-on-top waveform + partial transcript while you speak.
 - **Auto-type at cursor** — transcribed text is injected into the focused app, just like WhisperFlow.
 - **Clipboard mode** — alternative output if auto-typing is blocked.
 - **AI post-processing** *(optional)* — clean up filler words, add punctuation, fix grammar with either local **Ollama** (no API key, fully offline) or **OpenAI**.
+- **Per-app profiles** — different custom vocabularies that auto-switch based on the focused app (e.g. "Code" profile for VS Code, "Slack" profile for Slack).
 - **Custom vocabulary** — teach VoxFlow your jargon, names, and replacements (e.g. `"my email" → "me@example.com"`).
 - **Voice commands** — say "new line", "new paragraph", "period", "comma", "question mark", etc.
 - **History with search** — all transcriptions saved locally in SQLite. Export to TXT / Markdown.
@@ -106,7 +111,34 @@ Settings are stored in `~/.voxflow/config.json` and editable from the GUI:
 - **Custom replacements** — JSON dictionary of `"phrase": "replacement"`
 - **Voice commands** — toggle built-in commands
 
-### AI post-processing (optional)
+## Transcription backends
+
+VoxFlow ships two backends and you can flip between them at any time via **Settings → Backend** or the tray **Backend** submenu.
+
+### Local (default)
+`faster-whisper` runs Whisper entirely on your machine. CUDA GPU auto-detected.
+- **Pros:** free, offline, no rate limits, private.
+- **Cons:** large models need RAM / VRAM; CPU-only is slower.
+
+### OpenAI API
+Uses OpenAI's hosted Whisper / `gpt-4o-transcribe` endpoints.
+- **Pros:** fastest end-to-end latency, state-of-the-art accuracy without needing a GPU.
+- **Cons:** needs internet + an API key (you pay per minute of audio).
+
+**How to supply your key:**
+
+Option 1 — paste into the app: **Settings → Backend → API key**. Stored in `~/.voxflow/config.json` (plain text; don't use on shared machines).
+
+Option 2 — environment variable: put `OPENAI_API_KEY=sk-...` in `.env` at the project root. The env var wins over the config value.
+
+Available OpenAI models:
+- `whisper-1` — the classic Whisper endpoint, balanced cost/accuracy.
+- `gpt-4o-transcribe` — best accuracy.
+- `gpt-4o-mini-transcribe` — cheapest, still very good.
+
+---
+
+## AI post-processing (optional)
 
 VoxFlow supports two AI providers for cleanup:
 
@@ -142,23 +174,50 @@ Either way, VoxFlow passes your raw transcript through the model with a prompt t
 
 ## CLI mode (quick smoke test without mic/hotkey)
 
-Want to verify transcription quality before wiring up mic & hotkeys? Transcribe an audio file directly:
+Transcribe an audio file directly, no tray/hotkey needed:
 
 ```bash
-# basic
+# local backend (default)
 python -m voxflow transcribe path/to/audio.wav
 
-# with post-processing (voice commands + custom vocabulary)
-python -m voxflow transcribe audio.mp3 --post
+# use OpenAI backend for this one run
+python -m voxflow transcribe audio.mp3 --backend openai
 
-# with AI cleanup (uses the configured provider, e.g. ollama)
+# with post-processing + AI cleanup
 python -m voxflow transcribe audio.mp3 --post --ai
 
-# override model for a one-off run
-python -m voxflow transcribe audio.wav --model large-v3 --language en --device cuda
+# override everything
+python -m voxflow transcribe audio.wav --backend local --model large-v3 --language en --device cuda
 ```
 
 Accepts any format `ffmpeg` supports (`.wav`, `.mp3`, `.flac`, `.m4a`, `.ogg`, ...).
+
+---
+
+## Per-app profiles
+
+You can define multiple profiles with different custom vocabularies, and VoxFlow will switch between them automatically based on the focused app.
+
+**Example:** "Code" profile expands `"api"` → `"API"` when VS Code is focused; "Slack" profile uses AI cleanup; "Default" is used everywhere else.
+
+In **Settings → Profiles** tab, define a JSON list like:
+```json
+[
+  {"name": "Default", "match_apps": [], "custom_replacements": {}},
+  {"name": "Code", "match_apps": ["code", "vscode", "pycharm"],
+   "custom_replacements": {"gpt": "GPT", "api": "API", "ui": "UI"}},
+  {"name": "Slack", "match_apps": ["slack"],
+   "custom_replacements": {}, "ai_enabled_override": true}
+]
+```
+Then check **"Auto-switch profile based on focused app"**.
+
+Focused-app detection is best-effort per OS:
+- **Windows**: uses `user32`/`psapi` (built-in).
+- **macOS**: uses `osascript` (built-in) — requires Accessibility permission.
+- **Linux**: requires `xdotool` installed (`sudo apt install xdotool`).
+
+You can also switch manually from the tray **Profile** submenu.
 
 ---
 
@@ -185,6 +244,14 @@ Accepts any format `ffmpeg` supports (`.wav`, `.mp3`, `.flac`, `.m4a`, `.ogg`, .
 | "semicolon" | `;` |
 | "open quote" / "close quote" | `"` |
 | "open paren" / "close paren" | `(` / `)` |
+
+---
+
+## Downloads (pre-built binaries)
+
+Don't want to install Python? Every tagged release (`v*`) auto-builds standalone binaries for **Windows, macOS, and Linux** via GitHub Actions.
+
+Check the [Releases](../../releases) page for `.zip` (Windows) / `.tar.gz` (macOS, Linux) archives. Unpack, run `voxflow`, done.
 
 ---
 
@@ -220,10 +287,12 @@ voxflow/
 - [x] Live overlay with waveform + partial transcripts ✅
 - [x] Local LLM post-processing (Ollama) ✅
 - [x] CLI mode (`voxflow transcribe <file>`) ✅
-- [ ] Per-app profiles (different vocab for Slack vs. VS Code)
+- [x] OpenAI Whisper API backend option ✅
+- [x] Per-app vocabulary profiles ✅
+- [x] Packaged binaries via PyInstaller + GitHub Actions ✅
+- [ ] Real-time streaming partial transcripts (WebSocket-style continuous feed)
 - [ ] Plugin system for custom post-processors
 - [ ] Auto-start on login installer
-- [ ] Packaged binaries (PyInstaller) for Win/Mac/Linux
 
 PRs welcome.
 

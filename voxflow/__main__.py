@@ -24,6 +24,7 @@ def _run_transcribe(args: argparse.Namespace) -> int:
     from voxflow.transcriber import Transcriber
 
     cfg = Config.load()
+    backend = args.backend or cfg.transcription_backend
     model_size = args.model or cfg.model_size
     language = args.language or cfg.language
     device = args.device or cfg.device
@@ -33,11 +34,14 @@ def _run_transcribe(args: argparse.Namespace) -> int:
         print(f"error: file not found: {path}", file=sys.stderr)
         return 2
 
-    print(f"Loading Whisper '{model_size}' on {device}...", file=sys.stderr)
+    print(f"Transcribing with backend='{backend}'...", file=sys.stderr)
     tr = Transcriber(
+        backend=backend,
         model_size=model_size,
         device=device,
         compute_type=cfg.compute_type,
+        openai_whisper_model=cfg.openai_whisper_model,
+        openai_api_key=cfg.openai_api_key,
         language=language,
     )
     raw = tr.transcribe_file(str(path))
@@ -45,7 +49,7 @@ def _run_transcribe(args: argparse.Namespace) -> int:
     if args.post:
         pp = PostProcessor(
             voice_commands_enabled=cfg.voice_commands_enabled,
-            custom_replacements=cfg.custom_replacements,
+            custom_replacements=cfg.effective_replacements(),
             strip_filler_words=cfg.strip_filler_words,
             ai_enabled=args.ai,
             ai_provider=args.ai_provider or cfg.ai_provider,
@@ -74,9 +78,11 @@ def main() -> None:
 
     p_tx = sub.add_parser("transcribe", help="Transcribe an audio file from disk.")
     p_tx.add_argument("file", help="Path to .wav / .mp3 / .flac / .m4a audio file.")
-    p_tx.add_argument("--model", help="Override model size (tiny/base/small/medium/large-v3)")
+    p_tx.add_argument("--backend", choices=["local", "openai"],
+                      help="Override transcription backend for this run")
+    p_tx.add_argument("--model", help="Override local model size (tiny/base/small/medium/large-v3)")
     p_tx.add_argument("--language", help="Language code or 'auto'")
-    p_tx.add_argument("--device", choices=["auto", "cpu", "cuda"], help="Compute device")
+    p_tx.add_argument("--device", choices=["auto", "cpu", "cuda"], help="Compute device (local)")
     p_tx.add_argument("--post", action="store_true",
                       help="Apply voice commands + custom replacements post-processing")
     p_tx.add_argument("--ai", action="store_true",

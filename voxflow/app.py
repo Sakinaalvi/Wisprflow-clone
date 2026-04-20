@@ -51,9 +51,12 @@ class VoxFlowApp:
             channels=self.config.channels,
         )
         self.transcriber = Transcriber(
+            backend=self.config.transcription_backend,
             model_size=self.config.model_size,
             device=self.config.device,
             compute_type=self.config.compute_type,
+            openai_whisper_model=self.config.openai_whisper_model,
+            openai_api_key=self.config.openai_api_key,
             language=self.config.language,
         )
         self.post_processor = PostProcessor(
@@ -192,6 +195,19 @@ class VoxFlowApp:
     def _transcribe_and_output(self, audio, duration: float) -> None:
         with self._busy:
             try:
+                # Per-app profile resolution: optional auto-detect → active_profile fallback.
+                profile = self._resolve_active_profile()
+                effective_replacements = self.config.effective_replacements(profile)
+                effective_ai = self.config.effective_ai_enabled(profile)
+                self.post_processor.update(
+                    voice_commands_enabled=self.config.voice_commands_enabled,
+                    custom_replacements=effective_replacements,
+                    strip_filler_words=self.config.strip_filler_words,
+                    ai_enabled=effective_ai,
+                    ai_provider=self.config.ai_provider,
+                    ollama_model=self.config.ollama_model,
+                    ollama_url=self.config.ollama_url,
+                )
                 raw = self.transcriber.transcribe(audio, self.config.sample_rate)
                 final = self.post_processor.process(raw)
                 if final:
@@ -214,11 +230,46 @@ class VoxFlowApp:
             finally:
                 self._set_tray_icon(self.IDLE_COLOR, "VoxFlow — idle")
 
+    def _resolve_active_profile(self):
+        """If auto-switch is on, pick a matching profile by focused app. Else use active_profile."""
+        if self.config.auto_switch_profiles:
+            try:
+                from voxflow.focused_app import get_focused_app_name
+                app_name = get_focused_app_name().lower()
+            except Exception:  # noqa: BLE001
+                app_name = ""
+            if app_name:
+                for p in self.config.profiles:
+                    matches = [m.lower() for m in p.get("match_apps", [])]
+                    if any(m and m in app_name for m in matches):
+                        from voxflow.config import Profile
+                        from dataclasses import asdict as _asdict
+                        merged = {**_asdict(Profile()), **p}
+                        return Profile(**merged)
+        return self.config.get_active_profile()
+
     # ------- tray -------
     def _run_tray(self) -> None:
         menu = pystray.Menu(
             pystray.MenuItem("Settings...", self._open_settings),
             pystray.MenuItem("History...", self._open_history),
+            pystray.MenuItem(
+                "Backend",
+                pystray.Menu(
+                    pystray.MenuItem(
+                        "Local (faster-whisper)",
+                        self._set_backend_local,
+                        checked=lambda i: self.config.transcription_backend == "local",
+                        radio=True,
+                    ),
+                    pystray.MenuItem(
+                        "OpenAI API",
+                        self._set_backend_openai,
+                        checked=lambda i: self.config.transcription_backend == "openai",
+                        radio=True,
+                    ),
+                ),
+            ),
             pystray.MenuItem(
                 "Output mode",
                 pystray.Menu(
@@ -236,6 +287,10 @@ class VoxFlowApp:
                     ),
                 ),
             ),
+            pystray.MenuItem(
+                "Profile",
+                pystray.Menu(lambda: self._build_profile_menu()),
+            ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit", self._quit),
         )
@@ -246,6 +301,22 @@ class VoxFlowApp:
             menu=menu,
         )
         self.tray.run()
+
+    def _build_profile_menu(self):
+        names = [p.get("name", "Default") for p in self.config.profiles] or ["Default"]
+        items = []
+        for n in names:
+            items.append(pystray.MenuItem(
+                n,
+                lambda _icon, _item, name=n: self._set_active_profile(name),
+                checked=lambda i, name=n: self.config.active_profile == name,
+                radio=True,
+            ))
+        return pystray.Menu(*items)
+
+    def _set_active_profile(self, name: str) -> None:
+        self.config.active_profile = name
+        self.config.save()
 
     def _set_tray_icon(self, color: str, tooltip: str) -> None:
         if self.tray is not None:
@@ -264,6 +335,16 @@ class VoxFlowApp:
         self.config.output_mode = "clipboard"
         self.config.save()
 
+    def _set_backend_local(self, _icon, _item) -> None:
+        self.config.transcription_backend = "local"
+        self.config.save()
+        self._on_config_saved()
+
+    def _set_backend_openai(self, _icon, _item) -> None:
+        self.config.transcription_backend = "openai"
+        self.config.save()
+        self._on_config_saved()
+
     def _open_settings(self, _icon=None, _item=None) -> None:
         from voxflow.ui.settings_window import SettingsWindow
         SettingsWindow(self.config, on_save=self._on_config_saved).show()
@@ -276,20 +357,16 @@ class VoxFlowApp:
         """Apply live config changes without restarting."""
         self.config.save()
         self.transcriber.update_config(
+            backend=self.config.transcription_backend,
             model_size=self.config.model_size,
             device=self.config.device,
             compute_type=self.config.compute_type,
+            openai_whisper_model=self.config.openai_whisper_model,
+            openai_api_key=self.config.openai_api_key,
             language=self.config.language,
         )
-        self.post_processor.update(
-            voice_commands_enabled=self.config.voice_commands_enabled,
-            custom_replacements=self.config.custom_replacements,
-            strip_filler_words=self.config.strip_filler_words,
-            ai_enabled=self.config.ai_enabled,
-            ai_provider=self.config.ai_provider,
-            ollama_model=self.config.ollama_model,
-            ollama_url=self.config.ollama_url,
-        )
+        # Post-processor will be refreshed per-utterance in _transcribe_and_output
+        # to pick up the active profile's replacements.
         self.text_output.type_delay_ms = self.config.type_delay_ms
         self.recorder = Recorder(
             sample_rate=self.config.sample_rate,
