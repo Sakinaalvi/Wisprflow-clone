@@ -6,7 +6,6 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from pathlib import Path
 from typing import Optional
 
 from PIL import Image, ImageDraw
@@ -19,6 +18,9 @@ from voxflow.post_processor import PostProcessor
 from voxflow.recorder import Recorder
 from voxflow.transcriber import Transcriber
 from voxflow.typer import TextOutput
+from voxflow.ui.overlay import (
+    ACCENT_BUSY, ACCENT_DONE, ACCENT_REC, Overlay,
+)
 
 log = logging.getLogger(__name__)
 
@@ -68,9 +70,13 @@ class VoxFlowApp:
 
         self.hotkeys: Optional[HotkeyManager] = None
         self.tray: Optional[pystray.Icon] = None
+        self.overlay = Overlay()
 
         self._busy = threading.Lock()
         self._record_started_at: float = 0.0
+        self._live_stop = threading.Event()
+        self._live_thread: Optional[threading.Thread] = None
+        self._latest_partial: str = ""
 
     # ------- lifecycle -------
     def run(self) -> None:
@@ -83,6 +89,8 @@ class VoxFlowApp:
         log.info("Shutting down...")
         if self.hotkeys:
             self.hotkeys.stop()
+        self._live_stop.set()
+        self.overlay.hide()
         self.recorder.cancel()
         self.history.close()
         if self.tray:
@@ -110,24 +118,76 @@ class VoxFlowApp:
         if self.recorder.is_recording:
             return
         self._record_started_at = time.time()
+        self._latest_partial = ""
         self.recorder.start()
         self._set_tray_icon(self.REC_COLOR, "VoxFlow — recording...")
+        if self.config.overlay_enabled:
+            self.overlay.show()
+            self.overlay.set_status("Listening...", ACCENT_REC)
+            self.overlay.set_partial("")
+            self._start_live_worker()
 
     def _on_record_stop(self) -> None:
         if not self.recorder.is_recording:
             return
         duration = time.time() - self._record_started_at
+        self._live_stop.set()
         audio = self.recorder.stop()
         self._set_tray_icon(self.BUSY_COLOR, "VoxFlow — transcribing...")
         if duration < self.config.min_record_seconds or audio.size == 0:
             log.info("Ignoring short recording (%.2fs)", duration)
             self._set_tray_icon(self.IDLE_COLOR, "VoxFlow — idle")
+            self.overlay.hide()
             return
+        if self.config.overlay_enabled:
+            self.overlay.set_status("Transcribing...", ACCENT_BUSY)
         threading.Thread(
             target=self._transcribe_and_output,
             args=(audio, duration),
             daemon=True,
         ).start()
+
+    def _start_live_worker(self) -> None:
+        """Background thread: push RMS to overlay at ~30Hz, kick partial transcripts periodically."""
+        self._live_stop.clear()
+
+        def worker() -> None:
+            last_partial = 0.0
+            while not self._live_stop.is_set() and self.recorder.is_recording:
+                # Waveform tick
+                try:
+                    rms = self.recorder.peek_rms()
+                    self.overlay.set_level(rms)
+                except Exception:  # noqa: BLE001
+                    pass
+
+                # Partial transcript tick
+                now = time.time()
+                if (
+                    self.config.show_partial_transcripts
+                    and now - last_partial >= self.config.partial_interval_s
+                ):
+                    last_partial = now
+                    audio = self.recorder.peek_audio()
+                    # Need at least ~0.8s of audio before first partial
+                    if audio.size >= int(self.config.sample_rate * 0.8):
+                        threading.Thread(
+                            target=self._run_partial, args=(audio,), daemon=True,
+                        ).start()
+
+                time.sleep(0.03)
+
+        self._live_thread = threading.Thread(target=worker, daemon=True)
+        self._live_thread.start()
+
+    def _run_partial(self, audio) -> None:
+        try:
+            text = self.transcriber.transcribe_partial(audio, self.config.sample_rate)
+            if text:
+                self._latest_partial = text
+                self.overlay.set_partial(text)
+        except Exception as e:  # noqa: BLE001
+            log.debug("Partial run failed: %s", e)
 
     def _transcribe_and_output(self, audio, duration: float) -> None:
         with self._busy:
@@ -142,8 +202,15 @@ class VoxFlowApp:
                         language=self.config.language,
                         duration_s=duration,
                     )
+                    if self.config.overlay_enabled:
+                        self.overlay.set_status("Done", ACCENT_DONE)
+                        preview = final if len(final) <= 140 else final[:137] + "..."
+                        self.overlay.set_final(preview)
+                else:
+                    self.overlay.hide()
             except Exception as e:  # noqa: BLE001
                 log.exception("Transcription pipeline failed: %s", e)
+                self.overlay.hide()
             finally:
                 self._set_tray_icon(self.IDLE_COLOR, "VoxFlow — idle")
 

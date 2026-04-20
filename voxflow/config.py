@@ -47,6 +47,9 @@ class Config:
 
     # UI
     play_sounds: bool = True
+    overlay_enabled: bool = True
+    show_partial_transcripts: bool = True
+    partial_interval_s: float = 1.5
 
     @classmethod
     def load(cls) -> "Config":

@@ -10,9 +10,10 @@ VoxFlow runs [OpenAI Whisper](https://github.com/openai/whisper) entirely on you
 
 - **100% local transcription** — runs fully offline on CPU or GPU (CUDA).
 - **Hold-to-talk global hotkey** — configurable (default: `Right Ctrl`).
+- **Live overlay** — always-on-top waveform + partial transcript while you speak.
 - **Auto-type at cursor** — transcribed text is injected into the focused app, just like WhisperFlow.
 - **Clipboard mode** — alternative output if auto-typing is blocked.
-- **AI post-processing** *(optional)* — clean up filler words, add punctuation, fix grammar with an OpenAI API key.
+- **AI post-processing** *(optional)* — clean up filler words, add punctuation, fix grammar with either local **Ollama** (no API key, fully offline) or **OpenAI**.
 - **Custom vocabulary** — teach VoxFlow your jargon, names, and replacements (e.g. `"my email" → "me@example.com"`).
 - **Voice commands** — say "new line", "new paragraph", "period", "comma", "question mark", etc.
 - **History with search** — all transcriptions saved locally in SQLite. Export to TXT / Markdown.
@@ -216,10 +217,11 @@ voxflow/
 
 ## Roadmap
 
-- [ ] Real-time streaming transcription (live partial results)
-- [ ] Per-app profiles (e.g. different vocab for Slack vs. VS Code)
-- [ ] Plugin system for custom post-processors
+- [x] Live overlay with waveform + partial transcripts ✅
 - [x] Local LLM post-processing (Ollama) ✅
+- [x] CLI mode (`voxflow transcribe <file>`) ✅
+- [ ] Per-app profiles (different vocab for Slack vs. VS Code)
+- [ ] Plugin system for custom post-processors
 - [ ] Auto-start on login installer
 - [ ] Packaged binaries (PyInstaller) for Win/Mac/Linux
 

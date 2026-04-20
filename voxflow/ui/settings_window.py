@@ -104,6 +104,29 @@ class SettingsWindow:
         ttk.Checkbutton(
             f, text="Play subtle sounds on record/stop", variable=self.var_sounds,
         ).grid(row=4, column=0, columnspan=2, sticky="w", pady=4)
+
+        self.var_overlay = tk.BooleanVar(value=self.config.overlay_enabled)
+        self.var_partials = tk.BooleanVar(value=self.config.show_partial_transcripts)
+
+        ttk.Separator(f, orient="horizontal").grid(
+            row=5, column=0, columnspan=2, sticky="we", pady=12
+        )
+        ttk.Label(f, text="Live overlay", font=("TkDefaultFont", 10, "bold")).grid(
+            row=6, column=0, columnspan=2, sticky="w"
+        )
+        ttk.Checkbutton(
+            f, text="Show live waveform + status overlay while recording",
+            variable=self.var_overlay,
+        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=4)
+        ttk.Checkbutton(
+            f, text="Show partial transcripts in overlay (updates ~1.5s)",
+            variable=self.var_partials,
+        ).grid(row=8, column=0, columnspan=2, sticky="w", pady=4)
+        ttk.Label(
+            f,
+            text="Partials use beam_size=1 with your current model. Disable if it slows recording on older CPUs.",
+            foreground="#666", wraplength=480, justify="left",
+        ).grid(row=9, column=0, columnspan=2, sticky="w", pady=(0, 4))
         return f
 
     def _build_ai_tab(self, parent) -> ttk.Frame:
@@ -200,6 +223,8 @@ class SettingsWindow:
         self.config.output_mode = self.var_out.get()
         self.config.type_delay_ms = int(self.var_delay.get())
         self.config.play_sounds = bool(self.var_sounds.get())
+        self.config.overlay_enabled = bool(self.var_overlay.get())
+        self.config.show_partial_transcripts = bool(self.var_partials.get())
         self.config.ai_enabled = bool(self.var_ai.get())
         self.config.ai_provider = self.var_provider.get()
         self.config.ollama_model = self.var_ollama_model.get().strip() or "llama3.2"

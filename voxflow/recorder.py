@@ -79,3 +79,22 @@ class Recorder:
         self._recording = False
         with self._lock:
             self._chunks = []
+
+    # ---- read-only peeks used by the live overlay ----
+    def peek_audio(self) -> np.ndarray:
+        """Return a copy of the buffered audio so far, without stopping."""
+        with self._lock:
+            if not self._chunks:
+                return np.zeros(0, dtype=np.float32)
+            return np.concatenate(self._chunks, axis=0).flatten().astype(np.float32)
+
+    def peek_rms(self, window_chunks: int = 3) -> float:
+        """RMS of the last few frames for a level meter."""
+        with self._lock:
+            if not self._chunks:
+                return 0.0
+            recent = self._chunks[-window_chunks:]
+            arr = np.concatenate(recent, axis=0).flatten()
+        if arr.size == 0:
+            return 0.0
+        return float(np.sqrt(np.mean(arr.astype(np.float32) ** 2)))

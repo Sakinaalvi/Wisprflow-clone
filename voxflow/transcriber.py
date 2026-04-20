@@ -24,6 +24,7 @@ class Transcriber:
         self.language = language
         self._model = None
         self._lock = threading.Lock()
+        self._inference_lock = threading.Lock()
 
     def _resolve_device(self) -> str:
         if self.device != "auto":
@@ -88,21 +89,47 @@ class Transcriber:
             raise ValueError(f"Expected 16kHz audio, got {sample_rate}Hz")
         return self._run(audio)
 
+    def transcribe_partial(self, audio: np.ndarray, sample_rate: int) -> str:
+        """Fast, non-blocking partial transcription for the live overlay.
+        Returns "" if the model is currently busy (caller should skip)."""
+        if audio.size == 0 or sample_rate != 16000:
+            return ""
+        if not self._inference_lock.acquire(blocking=False):
+            return ""
+        try:
+            self.ensure_loaded()
+            assert self._model is not None
+            lang = None if self.language == "auto" else self.language
+            segments, _info = self._model.transcribe(
+                audio,
+                language=lang,
+                vad_filter=False,
+                beam_size=1,
+                condition_on_previous_text=False,
+            )
+            return " ".join(seg.text.strip() for seg in segments).strip()
+        except Exception as e:  # noqa: BLE001
+            log.debug("Partial transcribe failed: %s", e)
+            return ""
+        finally:
+            self._inference_lock.release()
+
     def transcribe_file(self, path: str) -> str:
         """Transcribe an audio file from disk. faster-whisper handles decoding/resampling."""
         return self._run(path)
 
     def _run(self, source) -> str:
-        self.ensure_loaded()
-        assert self._model is not None
-        lang = None if self.language == "auto" else self.language
-        segments, info = self._model.transcribe(
-            source,
-            language=lang,
-            vad_filter=True,
-            beam_size=5,
-            condition_on_previous_text=False,
-        )
-        text = " ".join(seg.text.strip() for seg in segments).strip()
-        log.info("Transcribed (%s, %.2fs): %s", info.language, info.duration, text[:80])
-        return text
+        with self._inference_lock:
+            self.ensure_loaded()
+            assert self._model is not None
+            lang = None if self.language == "auto" else self.language
+            segments, info = self._model.transcribe(
+                source,
+                language=lang,
+                vad_filter=True,
+                beam_size=5,
+                condition_on_previous_text=False,
+            )
+            text = " ".join(seg.text.strip() for seg in segments).strip()
+            log.info("Transcribed (%s, %.2fs): %s", info.language, info.duration, text[:80])
+            return text
